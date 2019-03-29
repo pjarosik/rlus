@@ -46,7 +46,7 @@ function [] = simulate_linear_array(id, input_path, output_path)
     focal_zones = [30:20:200]'/1000; % TODO parametrize?
     Nf = max(size(focal_zones));
     focus_times = (focal_zones-10/1000)/c; % TODO why -10/1000?
- 
+
     %  Set the apodization
     apo = hanning(N_active)';
     if ~isfolder(output_path)
@@ -61,6 +61,7 @@ function [] = simulate_linear_array(id, input_path, output_path)
     disp(path_to_go);
     while true
         disp(strcat('Worker ', num2str(id), ': waiting for the job...'));
+        fclose(fopen(fullfile(input_path, strcat("started.", num2str(id))), 'w'))
         while (~isfile(path_to_go)) && (~isfile(path_to_die))
             pause(1);
         end

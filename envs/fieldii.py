@@ -80,6 +80,7 @@ class Field2:
                 os.remove(ready_file)
         os.remove(os.path.join(self.working_dir.name, "input.mat"))
         shutil.rmtree(os.path.join(self.working_dir.name, "input.mat.rf"))
+        print("...simulation completed.")
         return (rf_array, t_start)
 
     def _save_mat_file(
@@ -104,12 +105,17 @@ class Field2:
     def _start_sessions(self):
         self._pipes = [self._start_session(worker) for worker in range(self.no_workers)]
         print("Started %d MATLAB worker(s)." % len(self._pipes))
-        timeout = 25
-        print("Waiting %ds till all MATLAB processes will be available..." % timeout)
-        time.sleep(timeout)
-        print("Checking state of the workers...")
+        timeout = 120
+        print("Waiting max. %d [s] till all MATLAB workers will be available..." % timeout)
+        started_sign_pattern = os.path.join(self.working_dir.name, 'started.*')
+        while len(glob.glob(started_sign_pattern)) != self.no_workers and timeout > 0:
+            time.sleep(1)
+            timeout -= 1
+        if timeout <= 0:
+            raise RuntimeError("Timeout waiting for MATLAB processes, stopping.")
+        print("Checking state of workers...")
         self._assert_workers_exists()
-        print("Everything is ok.")
+        print("...OK!")
 
     def _start_session(self, session_id):
         fn_call = (
@@ -125,7 +131,6 @@ class Field2:
             "end ")
         matlab_call = ["matlab", "-nodisplay" , "-nosplash", "-nodesktop", "-r", fn_call]
         pipe = subprocess.Popen(matlab_call)
-        print("MATLAB function 'simulate_linear_array.m' started...")
         return pipe
 
     def _assert_workers_exists(self):
@@ -161,7 +166,6 @@ class Field2:
         return (rf_array, t_start_vector)
 
     def _cleanup(self):
-        # TODO przetestowac 
         for worker in range(self.no_workers):
             open(os.path.join(self.working_dir.name, ('die.%d' % worker)), 'a').close()
         print("Waiting till all child processes die...")
