@@ -330,7 +330,9 @@ class UsPhantomEnv(gym.Env):
         z: 1 - move the focal depth upwards, 2 - move the focal_depth downwards, 0 - don't move
         theta: 1 - rotate probe left, 2 - rotate probe right, 0 - don't move
         """
-        # TODO check, if episode is over, and do not let to execute this method
+        if self.current_step >= self.max_steps:
+            raise RuntimeError("This episode is over, reset the environment.")
+        self.current_step += 1
         # updated state of the phantom and probe
         action = np.array(action)
         # TODO self.phantom = self.phantom.step()
