@@ -118,6 +118,9 @@ class Field2:
         print("...OK!")
 
     def _start_session(self, session_id):
+        # TODO find more elegant way
+        prev_dir = os.getcwd()
+        os.chdir(os.path.dirname(__file__))
         fn_call = (
             "field_init, " +
             "try, " +
@@ -131,6 +134,7 @@ class Field2:
             "end ")
         matlab_call = ["matlab", "-nodisplay" , "-nosplash", "-nodesktop", "-r", fn_call]
         pipe = subprocess.Popen(matlab_call)
+        os.chdir(prev_dir)
         return pipe
 
     def _assert_workers_exists(self):
