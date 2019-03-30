@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import gym
+from gym import spaces
 import copy
 import random
 from scipy import signal, interpolate
@@ -93,15 +94,16 @@ class Teddy:
             paw.plot_mesh(ax, 'r')
 
     def to_string(self):
-        head_belly = "Teddy:\nbelly: pos={0}, r={1},\nhead: pos={2}, r={3},\n".format(
+        head_belly = "Teddy: angle={4}\nbelly: pos={0}, r={1},\nhead: pos={2}, r={3}".format(
             self.belly.pos,
             self.belly.r,
             self.head.pos,
-            self.head.r
+            self.head.r,
+            self.angle
         )
         paws_str = ""
         for paw in self.paws:
-            paws_str = paws_str + ("paw: pos={0}, r={1}\n".format(paw.pos, paw.r))
+            paws_str = paws_str + ("\npaw: pos={0}, r={1}".format(paw.pos, paw.r))
         return head_belly + paws_str
 
     def contains(self, points):
@@ -165,7 +167,7 @@ class Probe:
         return probe
 
     def to_string(self):
-        return "Probe: pos=%s, angle=%f" % (str(self.pos), self.angle)
+        return "Probe: pos=%s, angle=%f, focal_depth=%f" % (str(self.pos), self.angle, self.focal_depth)
 
 
 class Imaging:
@@ -301,30 +303,41 @@ class Phantom:
 
 
 class UsPhantomEnv(gym.Env):
+    _MOVE_ACTION_DICT = {
+        0: 0,
+        1: -10/1000, # [m]
+        2: 10/1000, # [m]
+    }
+    _ROTATE_ACTION_DICT = {
+        0: 0,
+        1: -10, # [degrees]
+        2: 10, # [degrees]
+    }
 
     def __init__(self, imaging, env_generator, max_steps=20, no_workers=2):
         self.env_generator = env_generator
         self.imaging = imaging
         self.max_steps = max_steps
         self.current_step = 0
+        self.action_space = spaces.MultiDiscrete([3, 3, 2])
         self.field_session = fieldii.Field2(no_workers=no_workers)
         self.reset()
 
     def step(self, action):
         """
-        @param action: a vector [x, y, theta], where
-        x: -1 move the probe to the left, 0 - dont move the probe, 1 - move to the right
-        y: 0 - dont move the focal depth, 1 - move focal point downards
-        theta: 0 - rotate probe left, 1 - rotate probe right
+        @param action: a vector [x, z, theta], where
+        x: 1 - move the probe to the left, 2 - move to the right, 0 - don't move
+        z: 1 - move the focal depth upwards, 2 - move the focal_depth downwards, 0 - don't move
+        theta: 1 - rotate probe left, 2 - rotate probe right, 0 - don't move
         """
         # TODO check, if episode is over, and do not let to execute this method
         # updated state of the phantom and probe
         action = np.array(action)
         # TODO self.phantom = self.phantom.step()
-#         action = np.array(action > .5, dtype=np.int8)
-        x_t = 10/1000*action[0]
-        z_t = 10/1000*action[1]
-        theta_t = 10*action[2]
+        #         action = np.array(action > .5, dtype=np.int8)
+        x_t = UsPhantomEnv._MOVE_ACTION_DICT[action[0]]
+        z_t = UsPhantomEnv._MOVE_ACTION_DICT[action[1]]
+        theta_t = UsPhantomEnv._ROTATE_ACTION_DICT[action[2]]
         # Constraints: do not go outside of the phantom box.
         if (self.probe.pos[0] + x_t) < self.phantom.x_border[1]:
             if (self.probe.pos[0] + x_t) > self.phantom.x_border[0]:
@@ -349,7 +362,7 @@ class UsPhantomEnv(gym.Env):
         tracked_object = [obj for obj in self.phantom.objects if isinstance(obj, Teddy)][0]
         tracked_pos = tracked_object.belly.pos
         current_pos = np.array([self.probe.pos[0], 0, self.probe.focal_depth])
-        reward = np.sqrt(np.sum(np.square(tracked_pos-current_pos)))
+        reward = -np.sqrt(np.sum(np.square(tracked_pos-current_pos)))
         # TODO how about the angle? compute cos between probe and tracked object
         episode_over = self.current_step >= self.max_steps
 
@@ -393,6 +406,10 @@ class UsPhantomEnv(gym.Env):
         return self.probe.to_string() + "\n" + self.phantom.to_string()
 
 
+    def __del__(self):
+        self.field_session._cleanup()
+
+
 def const_env_generator(phantom, probe):
     while True:
         yield phantom, probe
@@ -410,33 +427,34 @@ def random_env_generator():
     z_range_start, z_range_end = (z_border[0]+teddy_r+z_upper_eps, z_border[1]-teddy_r-eps)
 
     probe_width = 40/1000
-    eps_intersect = 5/1000 # how much probe's FOV and the object intersects
+    eps_intersect = 5/1000 # how much probe's FOV and the object intersect
 
     def get_rand(start, end):
         return random.random()*(end-start)+start
     while True:
         # Find position for Teddy.
-        teddy_pos = np.array([get_rand(x_range_start, x_range_end), 0, get_rand(z_range_start, z_range_end)])
-        teddy_angle = get_rand(0, 90)
+        teddy_pos = np.array([round(get_rand(x_range_start, x_range_end), 2), 0, round(get_rand(z_range_start, z_range_end), 2)]) # round to 1 [cm]
+        teddy_angle = round(get_rand(0, 90), -1)
         # Find position for the probe.
         probe_x_range_start = teddy_pos[0]-teddy_r-(probe_width/2)+eps_intersect
         probe_x_range_end = teddy_pos[0]+teddy_r+(probe_width/2)-eps_intersect
         probe_x = get_rand(probe_x_range_start, probe_x_range_end)
-        probe_pos = np.array(probe_x, 0, 0)
+        probe_pos = np.array([round(probe_x, 2), 0, 0]) # round to 1[cm]
         focal_range_start = max(20/1000, z_range_start-20/1000)
         focal_range_end = min(z_border[1], z_range_end+20/1000)
-        probe_focal_depth = get_rand(focal_range_start, focal_range_end)
-        probe_angle = get_rand(0, 90)
-        probe = phantom_env.Probe(
+        probe_focal_depth = round(get_rand(focal_range_start, focal_range_end), 2)
+        probe_angle = round(get_rand(0, 90), -1)
+        probe = Probe(
             pos=probe_pos,
             angle=probe_angle,
             width=probe_width,
             height=10/1000,
             focal_depth=probe_focal_depth
         )
-        phantom = phantom_env.Phantom(
+        phantom = Phantom(
+            x_border=x_border, y_border=y_border, z_border=z_border,
             objects=[
-                phantom_env.Teddy(
+                Teddy(
                     belly_pos=teddy_pos,
                     scale=teddy_r,
                     dist_ahead=.9
@@ -446,5 +464,6 @@ def random_env_generator():
             n_scatterers=int(4e4),
             n_bck_scatterers=int(2e3)
         )
+        yield phantom, probe
 
 
