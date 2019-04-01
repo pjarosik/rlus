@@ -5,7 +5,7 @@ import numpy as np
 import gym
 from gym.spaces import Box, Discrete
 import envs.phantom_env as phantom_env
-from envs.phantom_env import UsPhantomEnv, random_env_generator
+from envs.phantom_env import UsPhantomEnv, random_env_generator, const_env_generator
 
 
 # below code bases on openai.spinup A-C scheme implementation
@@ -32,6 +32,7 @@ def cnn_categorical_policy(x, a, hidden_sizes, activation, output_activation, ac
     logp = tf.reduce_sum(tf.one_hot(a, depth=act_dim) * logp_all, axis=1) # log probability of given actions
     logp_pi = tf.reduce_sum(tf.one_hot(pi, depth=act_dim) * logp_all, axis=1) # log probability of actions of given pi
     return pi, logp, logp_pi
+
 
 def cnn_gaussian_policy(x, a, hidden_sizes, activation, output_activation, action_space):
     act_dim = a.shape.as_list()[-1]
@@ -60,25 +61,52 @@ def cnn_actor_critic(x, a, hidden_sizes=(64,64), activation=tf.tanh,
     return pi, logp, logp_pi, v
 
 
-
-N_STEPS_PER_EPISODE = 1
+N_STEPS_PER_EPISODE = 16
+EPOCHS = 10
 N_WORKERS = 4
+EXP_DIR = '/home/pjarosik/src/rlus/agents/us_phantom'
 
 def env_fn():
+    probe = phantom_env.Probe(
+        pos=np.array([0, 0, 0]),
+        angle=0,
+        width=40/1000,
+        height=10/1000,
+        focal_depth=60/1000
+    )
+    phantom = phantom_env.Phantom(
+        objects=[
+            phantom_env.Teddy(
+                belly_pos=np.array([15/1000, 0, 40/1000]),
+                scale=10/1000,
+                dist_ahead=.9
+            )
+            .rotate_xy(angle=60),
+        ],
+        x_border=(-60/1000, 60/1000),
+        y_border=(-60/1000, 60/1000),
+        z_border=(0, 90/1000),
+        n_scatterers=int(4e4),
+        n_bck_scatterers=int(2e3)
+    )
     imaging = phantom_env.Imaging(
         c=1540,
         fs=100e6,
         image_width=40/1000,
-        image_resolution=(40, 90),
+        image_height=90/1000,
+        image_resolution=(40, 90), # [pixels]
         no_lines=64,
         median_filter_size=5,
-        dr_threshold=-100
+        dr_threshold=-100,
+        dec=2
     )
     env = UsPhantomEnv(
         imaging=imaging,
-        env_generator=random_env_generator(),
+        env_generator=const_env_generator(phantom, probe),
         max_steps=N_STEPS_PER_EPISODE,
-        no_workers=N_WORKERS
+        no_workers=N_WORKERS,
+        log_freq=2,
+        log_dir=EXP_DIR
     )
     return env
 
@@ -89,13 +117,13 @@ ac_kwargs = dict(
     # how about output_activation?
 )
 
-logger_kwargs = dict(output_dir='/home/pjarosik/src/rlus/us_phantom', exp_name='initial_test')
+logger_kwargs = dict(output_dir=EXP_DIR, exp_name='initial_test')
 
 vpg(
     env_fn=env_fn,
     actor_critic=cnn_actor_critic,
     ac_kwargs=ac_kwargs,
     steps_per_epoch=N_STEPS_PER_EPISODE,
-    epochs=1,
+    epochs=EPOCHS,
     max_ep_len=N_STEPS_PER_EPISODE,
     logger_kwargs=logger_kwargs)

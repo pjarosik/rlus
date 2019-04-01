@@ -7,6 +7,9 @@ import random
 from scipy import signal, interpolate
 import envs.fieldii as fieldii
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import os
+import pickle
 
 class Ball:
     def __init__(self, pos, r):
@@ -173,7 +176,9 @@ class Probe:
 class Imaging:
     def __init__(
         self,
-        c, fs, image_width,
+        c, fs,
+        image_width,
+        image_height,
         image_resolution,
         median_filter_size,
         no_lines,
@@ -183,6 +188,7 @@ class Imaging:
         self.c = c
         self.fs = fs
         self.image_width = image_width
+        self.image_height = image_height
         self.image_resolution = image_resolution
         self.median_filter_size = median_filter_size
         self.no_lines = no_lines
@@ -192,9 +198,8 @@ class Imaging:
     def _interp(self, data):
         input_xs = np.arange(0, data.shape[1])*(self.image_width/data.shape[1])
         input_zs = np.arange(0, data.shape[0])*(self.c/(2*self.fs))
-        output_xs = np.arange(self.image_width, step=self.image_width/self.image_resolution[0])[:self.image_resolution[0]]
-        image_depth = self.c/(2*self.fs)*data.shape[0]
-        output_zs = np.arange(image_depth, step=image_depth/self.image_resolution[1])[:self.image_resolution[1]] # FIXME make it more elegant
+        output_xs = np.arange(self.image_width, step=self.image_width/self.image_resolution[0])[:self.image_resolution[0]] # FIXME
+        output_zs = np.arange(self.image_height, step=self.image_height/self.image_resolution[1])[:self.image_resolution[1]]
         return interpolate.interp2d(input_xs, input_zs, data, kind="cubic")(output_xs, output_zs)
 
     def _detect_envelope(self, data):
@@ -319,18 +324,49 @@ class UsPhantomEnv(gym.Env):
         5: (0, 0, -10), # rotate -10 [degrees]
         6: (0, 0,  10) # rotate 10
     }
+    _ACTION_NAME_DICT = {
+        0: "NOP", # NOP
+        1: "LEFT", # move to left -10 [mm]
+        2: "RIGHT", # move to right  10
+        3: "UP", # move to upwards -10
+        4: "DOWN", # move to downwards -10
+        5: "ROT_L", # rotate -10 [degrees]
+        6: "ROT_R" # rotate 10
+    }
 
-    def __init__(self, imaging, env_generator, max_steps=20, no_workers=2):
-        self.env_generator = env_generator
-        self.phantom, self.probe = next(self.env_generator)
+    def __init__(
+            self,
+            imaging,
+            phantom_generator,
+            probe_generator,
+            max_steps=20,
+            no_workers=2,
+            log_freq=10,
+            log_dir=None,
+            angle_reward_coeff=100,
+            use_cache=False # WARN: currently this can be used with const_generators only!
+    ):
+        self.phantom_generator = phantom_generator
+        self.probe_generator = probe_generator
+        self.phantom = next(self.phantom_generator)
+        self.probe = next(self.probe_generator)
         self.imaging = imaging
         self.max_steps = max_steps
         self.current_step = 0
+        self.current_episode = -1
+        self.log_freq = log_freq # TODO prepare external logger
+        self.log_dir = log_dir
+        self.angle_reward_coeff = angle_reward_coeff
         self.action_space = spaces.Discrete(len(UsPhantomEnv._ACTION_DICT))
         # width, height -> height, width
         observation_shape = (imaging.image_resolution[1], imaging.image_resolution[0], 1)
         self.observation_space = spaces.Box(low=0, high=255, shape=observation_shape, dtype=np.uint8)
         self.field_session = fieldii.Field2(no_workers=no_workers)
+
+        self.use_cache = use_cache
+        if self.use_cache:
+            assert phantom_generator == const_object_generator, "Cache can be used with const phantom generator only."
+            self._cache = {}
 
     def _get_image(self):
         """Creates b-mode image from current state of env and probe."""
@@ -357,7 +393,6 @@ class UsPhantomEnv(gym.Env):
         self.current_step += 1
         # updated state of the phantom and probe
         # TODO self.phantom = self.phantom.step()
-        #         action = np.array(action > .5, dtype=np.int8)
         x_t, z_t, theta_t = UsPhantomEnv._ACTION_DICT[action]
         # Constraints: do not go outside of the phantom box.
         if (self.probe.pos[0] + x_t) < self.phantom.x_border[1]:
@@ -374,20 +409,33 @@ class UsPhantomEnv(gym.Env):
 
         ob = bmode
         # compute reward
+        reward = self._compute_reward()
+        episode_over = self.current_step >= self.max_steps
+
+        if self.current_episode % self.log_freq == 0:
+            self._log(action, ob, reward, self.current_step)
+
+        return ob, reward, episode_over, {}
+
+    def _compute_reward(self):
         tracked_object = [obj for obj in self.phantom.objects if isinstance(obj, Teddy)][0]
         tracked_pos = tracked_object.belly.pos*1e3 # [mm]
         current_pos = np.array([self.probe.pos[0], 0, self.probe.focal_depth]) * 1e3
         reward = -np.sqrt(np.sum(np.square(tracked_pos-current_pos)))
-        # TODO how about the angle? compute cos between probe and tracked object
-        episode_over = self.current_step >= self.max_steps
-
-        return ob, reward, episode_over, {}
+        reward += self.angle_reward_coeff*abs(math.cos(math.radians(self.probe.angle-tracked_object.angle)))
+        return reward
 
     def reset(self):
         print("Restarting environment.")
-        self.phantom, self.probe = next(self.env_generator)
+        self.phantom, self.probe = next(self.phantom_generator), next(self.probe_generator)
         self.current_step = 0
-        return self._get_image()
+        self.current_episode += 1
+        obs = self._get_image()
+        if self.current_episode % self.log_freq == 0:
+            reward = self._compute_reward()
+            self._log(None, obs, reward, 0)
+        return obs
+
 
     def render_pyplot(self, ax, mode='human', close=False):
         ax.set_xlabel("$X$")
@@ -422,10 +470,86 @@ class UsPhantomEnv(gym.Env):
     def to_string(self):
         return self.probe.to_string() + "\n" + self.phantom.to_string()
 
+    def __getstate__(self):
+        return {
+            'phantom' : self.phantom,
+            'probe' : self.probe,
+            'imaging' : self.imaging,
+            'max_steps' : self.max_steps,
+            'current_step' : self.current_step,
+            'action_space' : self.action_space,
+            'observation_space' : self.observation_space,
+        }
 
-def const_env_generator(phantom, probe):
+    def __setstate__(self):
+        # TODO implement
+        raise NotImplementedError
+
+    def _log(self, action, ob, reward, step):
+        if self.log_dir is not None:
+            episode_dir = os.path.join(self.log_dir, "episode_%d"%self.current_episode)
+            os.makedirs(episode_dir, exist_ok=True)
+
+            # Save log file
+            tracked_object = [obj for obj in self.phantom.objects if isinstance(obj, Teddy)][0]
+            log_file = os.path.join(episode_dir, "steps.txt")
+            log_header = [
+                'episode',
+                'step',
+                'action',
+                'reward',
+                'probe_x',
+                'probe_z',
+                'probe_angle',
+                'obj_x',
+                'obj_z',
+                'obj_angle'
+            ]
+            log_values = [
+                self.current_episode,
+                step,
+                UsPhantomEnv._ACTION_NAME_DICT[action],
+                reward,
+                self.probe.pos[0],
+                self.probe.focal_depth,
+                self.probe.angle,
+                tracked_object.belly.pos[0],
+                tracked_object.belly.pos[2],
+                tracked_object.angle
+            ]
+            if not os.path.isfile(log_file):
+                # first step, write header
+                with open(log_file, 'a') as f:
+                    f.write('\t'.join(log_header))
+                    f.write('\n')
+            # Write log values.
+            with open(log_file, 'a') as f:
+                log_values = [str(v) for v in log_values]
+                f.write('\t'.join(log_values))
+                f.write('\n')
+            # Write visualization of the env and observation.
+            # Visualize observation.
+            title_elements = [("ep: %d", self.current_episode), ("step: %d", step), ("reward: %.2f", reward)]
+            title_elements = [el[0] % el[1] for el in title_elements if el[1] is not None]
+            title = ",".join(title_elements)
+            fig = plt.figure()
+            plt.title(title)
+            plt.imshow(ob.squeeze(), cmap='gray')
+            plt.savefig(os.path.join(episode_dir, "step_%03d.png" % step))
+            # Visualize environment.
+            fig = plt.figure()
+            plt.title(title)
+            fig.set_size_inches(10, 10)
+            ax = fig.add_subplot(111, projection='3d')
+            self.render_pyplot(ax)
+            plt.savefig(os.path.join(episode_dir, "env_%03d.png" % step))
+            # Pickle dump phantom and probe.
+            with open(os.path.join(episode_dir, 'state_%03d.pkl'% step), "wb") as f:
+                pickle.dump({'phantom': self.phantom, 'probe': self.probe}, f)
+
+def const_object_generator(obj):
     while True:
-        yield phantom, probe
+        yield obj
 
 def random_env_generator():
     """Infinite generator of phantoms with randomly located objects and probe."""
