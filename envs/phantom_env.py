@@ -174,25 +174,27 @@ class Imaging:
     def __init__(
         self,
         c, fs, image_width,
-        image_grid, grid_step,
+        image_resolution,
         median_filter_size,
         no_lines,
-        dr_threshold
+        dr_threshold,
+        dec=1
     ):
         self.c = c
         self.fs = fs
         self.image_width = image_width
-        self.image_grid = image_grid
-        self.grid_step = grid_step
+        self.image_resolution = image_resolution
         self.median_filter_size = median_filter_size
         self.no_lines = no_lines
         self.dr_threshold = dr_threshold
+        self.dec = dec
 
     def _interp(self, data):
         input_xs = np.arange(0, data.shape[1])*(self.image_width/data.shape[1])
         input_zs = np.arange(0, data.shape[0])*(self.c/(2*self.fs))
-        output_xs = np.arange(self.image_grid[0], step=self.grid_step)
-        output_zs = np.arange(self.image_grid[1], step=self.grid_step)
+        output_xs = np.arange(self.image_width, step=self.image_width/self.image_resolution[0])[:self.image_resolution[0]]
+        image_depth = self.c/(2*self.fs)*data.shape[0]
+        output_zs = np.arange(image_depth, step=image_depth/self.image_resolution[1])[:self.image_resolution[1]] # FIXME make it more elegant
         return interpolate.interp2d(input_xs, input_zs, data, kind="cubic")(output_xs, output_zs)
 
     def _detect_envelope(self, data):
@@ -204,10 +206,15 @@ class Imaging:
         return np.clip(data, dr, 0)
 
     def create_bmode(self, rf):
+        # decimate redundant data
+        data = rf[::self.dec, :]
         data = self._detect_envelope(rf)
         data = self._adjust_dynamic_range(data, dr=self.dr_threshold)
         data = self._interp(data)
         data = signal.medfilt(data, kernel_size=5)
+        # convert to unit8
+        data = data-data.min()
+        data = (255*(data/data.max())).astype(np.uint8)
         return data
 
 
@@ -303,25 +310,40 @@ class Phantom:
 
 
 class UsPhantomEnv(gym.Env):
-    _MOVE_ACTION_DICT = {
-        0: 0,
-        1: -10/1000, # [m]
-        2: 10/1000, # [m]
-    }
-    _ROTATE_ACTION_DICT = {
-        0: 0,
-        1: -10, # [degrees]
-        2: 10, # [degrees]
+    _ACTION_DICT = {
+        0: (0, 0, 0), # NOP
+        1: (-10/1000, 0, 0), # move to left -10 [mm]
+        2: (10/1000,  0, 0), # move to right  10
+        3: (0, -10/1000, 0), # move to upwards -10
+        4: (0,  10/1000, 0), # move to downwards -10
+        5: (0, 0, -10), # rotate -10 [degrees]
+        6: (0, 0,  10) # rotate 10
     }
 
     def __init__(self, imaging, env_generator, max_steps=20, no_workers=2):
         self.env_generator = env_generator
+        self.phantom, self.probe = next(self.env_generator)
         self.imaging = imaging
         self.max_steps = max_steps
         self.current_step = 0
-        self.action_space = spaces.MultiDiscrete([3, 3, 2])
+        self.action_space = spaces.Discrete(len(UsPhantomEnv._ACTION_DICT))
+        # width, height -> height, width
+        observation_shape = (imaging.image_resolution[1], imaging.image_resolution[0], 1)
+        self.observation_space = spaces.Box(low=0, high=255, shape=observation_shape, dtype=np.uint8)
         self.field_session = fieldii.Field2(no_workers=no_workers)
-        self.reset()
+
+    def _get_image(self):
+        """Creates b-mode image from current state of env and probe."""
+        points, amps, _ = self.phantom.get_points(self.probe)
+        rf_array, t_start = self.field_session.simulate_linear_array(
+            points, amps,
+            sampling_frequency=self.imaging.fs,
+            no_lines=self.imaging.no_lines,
+            z_focus=self.probe.focal_depth)
+        bmode = self.imaging.create_bmode(rf_array)
+        bmode = bmode.reshape(bmode.shape+(1,))
+        print("Bmode shape %s" % str(bmode.shape))
+        return bmode
 
     def step(self, action):
         """
@@ -334,12 +356,9 @@ class UsPhantomEnv(gym.Env):
             raise RuntimeError("This episode is over, reset the environment.")
         self.current_step += 1
         # updated state of the phantom and probe
-        action = np.array(action)
         # TODO self.phantom = self.phantom.step()
         #         action = np.array(action > .5, dtype=np.int8)
-        x_t = UsPhantomEnv._MOVE_ACTION_DICT[action[0]]
-        z_t = UsPhantomEnv._MOVE_ACTION_DICT[action[1]]
-        theta_t = UsPhantomEnv._ROTATE_ACTION_DICT[action[2]]
+        x_t, z_t, theta_t = UsPhantomEnv._ACTION_DICT[action]
         # Constraints: do not go outside of the phantom box.
         if (self.probe.pos[0] + x_t) < self.phantom.x_border[1]:
             if (self.probe.pos[0] + x_t) > self.phantom.x_border[0]:
@@ -351,19 +370,13 @@ class UsPhantomEnv(gym.Env):
 
         self.probe = self.probe.rotate(theta_t)
         # create new observation
-        points, amps, _ = self.phantom.get_points(self.probe)
-        rf_array, t_start = self.field_session.simulate_linear_array(
-            points, amps,
-            sampling_frequency=self.imaging.fs,
-            no_lines=self.imaging.no_lines,
-            z_focus=self.probe.focal_depth)
-        bmode = self.imaging.create_bmode(rf_array)
+        bmode = self._get_image()
 
         ob = bmode
         # compute reward
         tracked_object = [obj for obj in self.phantom.objects if isinstance(obj, Teddy)][0]
-        tracked_pos = tracked_object.belly.pos
-        current_pos = np.array([self.probe.pos[0], 0, self.probe.focal_depth])
+        tracked_pos = tracked_object.belly.pos*1e3 # [mm]
+        current_pos = np.array([self.probe.pos[0], 0, self.probe.focal_depth]) * 1e3
         reward = -np.sqrt(np.sum(np.square(tracked_pos-current_pos)))
         # TODO how about the angle? compute cos between probe and tracked object
         episode_over = self.current_step >= self.max_steps
@@ -371,8 +384,10 @@ class UsPhantomEnv(gym.Env):
         return ob, reward, episode_over, {}
 
     def reset(self):
+        print("Restarting environment.")
         self.phantom, self.probe = next(self.env_generator)
         self.current_step = 0
+        return self._get_image()
 
     def render_pyplot(self, ax, mode='human', close=False):
         ax.set_xlabel("$X$")
@@ -408,10 +423,6 @@ class UsPhantomEnv(gym.Env):
         return self.probe.to_string() + "\n" + self.phantom.to_string()
 
 
-    def __del__(self):
-        self.field_session._cleanup()
-
-
 def const_env_generator(phantom, probe):
     while True:
         yield phantom, probe
@@ -442,7 +453,7 @@ def random_env_generator():
         probe_x_range_end = teddy_pos[0]+teddy_r+(probe_width/2)-eps_intersect
         probe_x = get_rand(probe_x_range_start, probe_x_range_end)
         probe_pos = np.array([round(probe_x, 2), 0, 0]) # round to 1[cm]
-        focal_range_start = max(20/1000, z_range_start-20/1000)
+        focal_range_start = max(40/1000, z_range_start-20/1000)
         focal_range_end = min(z_border[1], z_range_end+20/1000)
         probe_focal_depth = round(get_rand(focal_range_start, focal_range_end), 2)
         probe_angle = round(get_rand(0, 90), -1)
