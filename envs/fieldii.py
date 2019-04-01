@@ -177,10 +177,8 @@ class Field2:
             while pipe.poll() is None:
                 time.sleep(2)
         print("All subprocesses are dead now, session is closed.")
-        if self._remove_working_dir and os.path.isdir(self.working_dir.name):
-            shutil.rmtree(self.working_dir.name)
 
-    def __del__(self):
-        self._cleanup()
+    # def __del__(self):
+    #     self._cleanup() called atexit
 
 
