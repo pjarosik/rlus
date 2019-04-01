@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import os
 import pickle
+# from memory_profiler import profile
+
 
 class Ball:
     def __init__(self, pos, r):
@@ -337,8 +339,7 @@ class UsPhantomEnv(gym.Env):
     def __init__(
             self,
             imaging,
-            phantom_generator,
-            probe_generator,
+            env_generator,
             max_steps=20,
             no_workers=2,
             log_freq=10,
@@ -346,10 +347,8 @@ class UsPhantomEnv(gym.Env):
             angle_reward_coeff=100,
             use_cache=False # WARN: currently this can be used with const_generators only!
     ):
-        self.phantom_generator = phantom_generator
-        self.probe_generator = probe_generator
-        self.phantom = next(self.phantom_generator)
-        self.probe = next(self.probe_generator)
+        self.env_generator = env_generator
+        self.phantom, self.probe = next(self.env_generator)
         self.imaging = imaging
         self.max_steps = max_steps
         self.current_step = 0
@@ -365,7 +364,7 @@ class UsPhantomEnv(gym.Env):
 
         self.use_cache = use_cache
         if self.use_cache:
-            assert phantom_generator == const_object_generator, "Cache can be used with const phantom generator only."
+            assert self.env_generator.__name__ in {const_env_generator.__name__, const_phantom_generator.__name__}, "Cache can be used with const phantom generator only."
             self._cache = {}
 
     def _get_image(self):
@@ -381,6 +380,23 @@ class UsPhantomEnv(gym.Env):
         print("Bmode shape %s" % str(bmode.shape))
         return bmode
 
+    def _get_cached_obs(self):
+        state = (int(round(self.probe.pos[0], 3)*1e3), int(round(self.probe.focal_depth, 3)*1e3), int(round(self.probe.angle)))
+        if state in self._cache:
+            print("Using cached value for probe state (x, z, theta)=%s" % str(state))
+        else:
+            bmode = self._get_image()
+            self._cache[state] = bmode
+        return self._cache[state]
+
+    def _get_observation(self):
+        if self.use_cache:
+            return self._get_cached_obs()
+        else:
+            return self._get_image()
+
+
+    # @profile
     def step(self, action):
         """
         @param action: a vector [x, z, theta], where
@@ -394,6 +410,7 @@ class UsPhantomEnv(gym.Env):
         # updated state of the phantom and probe
         # TODO self.phantom = self.phantom.step()
         x_t, z_t, theta_t = UsPhantomEnv._ACTION_DICT[action]
+        print("Executing action: %s" % str((x_t, z_t, theta_t)))
         # Constraints: do not go outside of the phantom box.
         if (self.probe.pos[0] + x_t) < self.phantom.x_border[1]:
             if (self.probe.pos[0] + x_t) > self.phantom.x_border[0]:
@@ -405,9 +422,7 @@ class UsPhantomEnv(gym.Env):
 
         self.probe = self.probe.rotate(theta_t)
         # create new observation
-        bmode = self._get_image()
-
-        ob = bmode
+        ob = self._get_observation()
         # compute reward
         reward = self._compute_reward()
         episode_over = self.current_step >= self.max_steps
@@ -427,10 +442,10 @@ class UsPhantomEnv(gym.Env):
 
     def reset(self):
         print("Restarting environment.")
-        self.phantom, self.probe = next(self.phantom_generator), next(self.probe_generator)
+        self.phantom, self.probe = next(self.env_generator)
         self.current_step = 0
         self.current_episode += 1
-        obs = self._get_image()
+        obs = self._get_observation()
         if self.current_episode % self.log_freq == 0:
             reward = self._compute_reward()
             self._log(None, obs, reward, 0)
@@ -508,7 +523,7 @@ class UsPhantomEnv(gym.Env):
             log_values = [
                 self.current_episode,
                 step,
-                UsPhantomEnv._ACTION_NAME_DICT[action],
+                UsPhantomEnv._ACTION_NAME_DICT[action] if action is not None else None,
                 reward,
                 self.probe.pos[0],
                 self.probe.focal_depth,
@@ -536,6 +551,7 @@ class UsPhantomEnv(gym.Env):
             plt.title(title)
             plt.imshow(ob.squeeze(), cmap='gray')
             plt.savefig(os.path.join(episode_dir, "step_%03d.png" % step))
+            plt.close(fig)
             # Visualize environment.
             fig = plt.figure()
             plt.title(title)
@@ -543,13 +559,46 @@ class UsPhantomEnv(gym.Env):
             ax = fig.add_subplot(111, projection='3d')
             self.render_pyplot(ax)
             plt.savefig(os.path.join(episode_dir, "env_%03d.png" % step))
+            plt.close(fig)
             # Pickle dump phantom and probe.
             with open(os.path.join(episode_dir, 'state_%03d.pkl'% step), "wb") as f:
                 pickle.dump({'phantom': self.phantom, 'probe': self.probe}, f)
 
-def const_object_generator(obj):
+def const_env_generator(phantom, probe):
     while True:
-        yield obj
+        yield phantom, probe
+
+def _get_rand(start, end):
+        return random.random()*(end-start)+start
+
+def const_phantom_generator(phantom):
+    z_border = phantom.z_border
+    eps_intersect = 5/1000 # how much probe's FOV and the object intersect
+    tracked_object = [obj for obj in phantom.objects if isinstance(obj, Teddy)][0]
+    teddy_pos = tracked_object.belly.pos
+    teddy_r = tracked_object.belly.r
+    probe_width = 40/1000
+    eps = 5/1000
+    z_upper_eps = 20/1000
+    z_range_start, z_range_end = (z_border[0]+teddy_r+z_upper_eps, z_border[1]-teddy_r-eps)
+    while True:
+        probe_x_range_start = teddy_pos[0]-teddy_r-(probe_width/2)+eps_intersect
+        probe_x_range_end = teddy_pos[0]+teddy_r+(probe_width/2)-eps_intersect
+        probe_x = get_rand(probe_x_range_start, probe_x_range_end)
+        probe_pos = np.array([round(probe_x, 2), 0, 0]) # round to 1[cm]
+        focal_range_start = max(40/1000, z_range_start-20/1000)
+        focal_range_end = min(z_border[1], z_range_end+20/1000)
+        probe_focal_depth = round(get_rand(focal_range_start, focal_range_end), 2)
+        probe_angle = round(get_rand(0, 90), -1)
+        probe = Probe(
+            pos=probe_pos,
+            angle=probe_angle,
+            width=probe_width,
+            height=10/1000,
+            focal_depth=probe_focal_depth
+        )
+        yield phantom, probe
+
 
 def random_env_generator():
     """Infinite generator of phantoms with randomly located objects and probe."""
@@ -565,22 +614,19 @@ def random_env_generator():
 
     probe_width = 40/1000
     eps_intersect = 5/1000 # how much probe's FOV and the object intersect
-
-    def get_rand(start, end):
-        return random.random()*(end-start)+start
     while True:
         # Find position for Teddy.
-        teddy_pos = np.array([round(get_rand(x_range_start, x_range_end), 2), 0, round(get_rand(z_range_start, z_range_end), 2)]) # round to 1 [cm]
-        teddy_angle = round(get_rand(0, 90), -1)
+        teddy_pos = np.array([round(_get_rand(x_range_start, x_range_end), 2), 0, round(_get_rand(z_range_start, z_range_end), 2)]) # round to 1 [cm]
+        teddy_angle = round(_get_rand(0, 90), -1)
         # Find position for the probe.
         probe_x_range_start = teddy_pos[0]-teddy_r-(probe_width/2)+eps_intersect
         probe_x_range_end = teddy_pos[0]+teddy_r+(probe_width/2)-eps_intersect
-        probe_x = get_rand(probe_x_range_start, probe_x_range_end)
+        probe_x = _get_rand(probe_x_range_start, probe_x_range_end)
         probe_pos = np.array([round(probe_x, 2), 0, 0]) # round to 1[cm]
         focal_range_start = max(40/1000, z_range_start-20/1000)
         focal_range_end = min(z_border[1], z_range_end+20/1000)
-        probe_focal_depth = round(get_rand(focal_range_start, focal_range_end), 2)
-        probe_angle = round(get_rand(0, 90), -1)
+        probe_focal_depth = round(_get_rand(focal_range_start, focal_range_end), 2)
+        probe_angle = round(_get_rand(0, 90), -1)
         probe = Probe(
             pos=probe_pos,
             angle=probe_angle,

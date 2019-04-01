@@ -6,6 +6,7 @@ import gym
 from gym.spaces import Box, Discrete
 import envs.phantom_env as phantom_env
 from envs.phantom_env import UsPhantomEnv, random_env_generator, const_env_generator
+# import tracemalloc
 
 
 # below code bases on openai.spinup A-C scheme implementation
@@ -61,10 +62,10 @@ def cnn_actor_critic(x, a, hidden_sizes=(64,64), activation=tf.tanh,
     return pi, logp, logp_pi, v
 
 
-N_STEPS_PER_EPISODE = 16
-EPOCHS = 10
+N_STEPS_PER_EPISODE = 32
+EPOCHS = 101 # == Number of episodes in this case
 N_WORKERS = 4
-EXP_DIR = '/home/pjarosik/src/rlus/agents/us_phantom'
+EXP_DIR = '/home/pjarosik/src/rlus/agents/us_phantom_100epoch_32steps'
 
 def env_fn():
     probe = phantom_env.Probe(
@@ -72,12 +73,12 @@ def env_fn():
         angle=0,
         width=40/1000,
         height=10/1000,
-        focal_depth=60/1000
+        focal_depth=40/1000
     )
     phantom = phantom_env.Phantom(
         objects=[
             phantom_env.Teddy(
-                belly_pos=np.array([15/1000, 0, 40/1000]),
+                belly_pos=np.array([10/1000, 0, 60/1000]),
                 scale=10/1000,
                 dist_ahead=.9
             )
@@ -105,25 +106,37 @@ def env_fn():
         env_generator=const_env_generator(phantom, probe),
         max_steps=N_STEPS_PER_EPISODE,
         no_workers=N_WORKERS,
-        log_freq=2,
-        log_dir=EXP_DIR
+        log_freq=10,
+        log_dir=EXP_DIR,
+        angle_reward_coeff=20,
+        use_cache=True # remember to use const_phantom_generator or const_env_generator!
     )
     return env
 
 
 ac_kwargs = dict(
-    hidden_sizes=[8, 16],
+    hidden_sizes=[16, 32],
     activation=tf.nn.relu
     # how about output_activation?
 )
 
-logger_kwargs = dict(output_dir=EXP_DIR, exp_name='initial_test')
+logger_kwargs = dict(output_dir=EXP_DIR, exp_name='test_simple')
 
-vpg(
-    env_fn=env_fn,
-    actor_critic=cnn_actor_critic,
-    ac_kwargs=ac_kwargs,
-    steps_per_epoch=N_STEPS_PER_EPISODE,
-    epochs=EPOCHS,
-    max_ep_len=N_STEPS_PER_EPISODE,
-    logger_kwargs=logger_kwargs)
+# tracemalloc.start()
+
+def run_vpg():
+    vpg(env_fn=env_fn,
+        actor_critic=cnn_actor_critic,
+        ac_kwargs=ac_kwargs,
+        steps_per_epoch=N_STEPS_PER_EPISODE,
+        epochs=EPOCHS,
+        max_ep_len=N_STEPS_PER_EPISODE,
+        logger_kwargs=logger_kwargs)
+
+run_vpg()
+
+# snapshot = tracemalloc.take_snapshot()
+# top_stats = snapshot.statistics('lineno')
+
+# for stat in top_stats[:10]:
+#     print(stat)
