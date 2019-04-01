@@ -29,7 +29,8 @@ if __name__ == '__main__':
         c=1540,
         fs=100e6,
         image_width=40/1000,
-        image_grid=(40/1000, 90/1000),
+        image_resolution=(40, 90),
+        # image_grid=(40/1000, 90/1000),
         grid_step=0.5/1000,
         no_lines=64,
         median_filter_size=5,
@@ -46,14 +47,14 @@ if __name__ == '__main__':
         fig = plt.figure()
         plt.title(title)
         plt.imshow(ob, cmap='gray')
-        plt.savefig(os.path.join(d, "step_%d.png" % i))
+        plt.savefig(os.path.join(d, "step_%03d.png" % i))
 
     def plot_env(d, i):
         fig = plt.figure()
         fig.set_size_inches(10, 10)
         ax = fig.add_subplot(111, projection='3d')
         env.render_pyplot(ax)
-        plt.savefig(os.path.join(d, "env_%d.png" % i))
+        plt.savefig(os.path.join(d, "env_%03d.png" % i))
 
 
     for episode in range(args.no_episodes):
@@ -77,12 +78,15 @@ if __name__ == '__main__':
             end = time.time()
             print("Environment execution time: %d [s]" % (end-start))
             print("reward %f" % reward)
+            with open(os.path.join(episode_dir, "log.txt"), 'a') as f:
+                f.write("Episode %d, step %d\n" % (episode, step))
+                f.write("Take action: %s\n" % action)
+                f.write("Reward: %f\n" % reward)
+                f.write(env.to_string())
             print(env.to_string())
             if args.output_dir:
                 plot_obj(episode_dir, step, ob, "ep: %d, step: %d, reward: %s" % (episode, step, str(reward)))
                 plot_env(episode_dir, step)
-            
-    del env
     print("Training is over (achieved max. number of episodes).")
 
 
