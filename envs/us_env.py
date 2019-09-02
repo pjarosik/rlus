@@ -14,28 +14,6 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class PhantomUsEnv(gym.Env):
-    _STEP_SIZE = 10/1000  # [m]
-    _ROT_DEG = 10  # [degrees]
-
-    _ACTION_DICT = {
-        0: (0, 0, 0),  # NOP
-        1: (-_STEP_SIZE, 0, 0),  # move to the left
-        2: (_STEP_SIZE,  0, 0),  # move to the right
-        3: (0, -_STEP_SIZE, 0),  # move upwards
-        4: (0,  _STEP_SIZE, 0),  # move downwards
-        5: (0, 0, -_ROT_DEG),
-        6: (0, 0,  _ROT_DEG)
-    }
-    ACTION_NAME_DICT = {
-        0: "NOP",
-        1: "LEFT",
-        2: "RIGHT",
-        3: "UP",
-        4: "DOWN",
-        5: "ROT_L",
-        6: "ROT_R"
-    }
-
     def __init__(
         self,
         imaging,
@@ -45,7 +23,9 @@ class PhantomUsEnv(gym.Env):
         no_workers=2,
         trajectory_logger=None,
         angle_reward_coeff=0,
-        use_cache=False
+        use_cache=False,
+        step_size=10/1000, # [m]
+        rot_deg=10 # [deg]
     ):
         # validate
         if use_cache and not isinstance(phantom_generator, ConstPhantomGenerator):
@@ -58,6 +38,8 @@ class PhantomUsEnv(gym.Env):
         self.probe_generator = probe_generator
         self.imaging = imaging
         self.max_steps = max_steps
+        self.step_size = step_size
+        self.rot_deg = rot_deg
         self.current_step = 0
         self.current_episode = -1
         # To reduce the number of calls to FieldII, we store lastly seen
@@ -70,7 +52,7 @@ class PhantomUsEnv(gym.Env):
         if self.use_cache:
             self._cache = {}
 
-        self.action_space = spaces.Discrete(len(PhantomUsEnv._ACTION_DICT))
+        self.action_space = spaces.Discrete(len(self._get_action_map()))
         observation_shape = (
             imaging.image_resolution[1],
             imaging.image_resolution[0],
@@ -87,6 +69,36 @@ class PhantomUsEnv(gym.Env):
         _LOGGER.debug("Created environment: %s" % repr(self))
         _LOGGER.debug("Action space: %s" % repr(self.action_space))
         _LOGGER.debug("Observations space: %s" % repr(self.observation_space))
+
+    def _get_action_map(self):
+        return {
+            0: (0, 0, 0),  # NOP
+            1: (-self.step_size, 0, 0),  # move to the left
+            2: (self.step_size,  0, 0),  # move to the right
+            3: (0, -self.step_size, 0),  # move upwards
+            4: (0,  self.step_size, 0),  # move downwards
+            5: (0, 0, -self.rot_deg),
+            6: (0, 0,  self.rot_deg)
+        }
+
+    def _get_action(self, action_number):
+        # Function to override.
+        return self._get_action_map()[action_number]
+
+    def get_action_name(self, action_number):
+        """
+        Returns string representation for given action number
+        (e.g. when logging trajectory to file)
+        """
+        return {
+            0: "NOP",
+            1: "LEFT",
+            2: "RIGHT",
+            3: "UP",
+            4: "DOWN",
+            5: "ROT_L",
+            6: "ROT_R"
+        }.get(action_number, None)
 
     def reset(self):
         """
@@ -172,13 +184,6 @@ class PhantomUsEnv(gym.Env):
     def close(self):
         self.field_session.close()
 
-    def get_action_name(self, action):
-        """
-        Returns string representation for given action number
-        (e.g. when logging trajectory to file)
-        """
-        return PhantomUsEnv.ACTION_NAME_DICT[action] if action is not None else None
-
     def get_state_desc(self):
         return {
             "probe_x": self.probe.pos[0],
@@ -190,7 +195,7 @@ class PhantomUsEnv(gym.Env):
         }
 
     def _perform_action(self, action):
-        x_t, z_t, theta_t = PhantomUsEnv._ACTION_DICT[action]
+        x_t, z_t, theta_t = self._get_action(action)
         _LOGGER.debug("Executing action: %s" % str((x_t, z_t, theta_t)))
         self._move_focal_point_if_possible(x_t, z_t)
         self.probe = self.probe.rotate(theta_t)

@@ -10,13 +10,6 @@ class Static2DPhantomUsEnv(PhantomUsEnv):
     _STEP_SIZE = 10/1000  # [m]
     _ROT_DEG = 10  # [degrees]
 
-    _ACTION_DICT = {
-        0: (0, 0, 0),  # NOP
-        1: (-_STEP_SIZE, 0, 0),  # move to the left
-        2: (_STEP_SIZE,  0, 0),  # move to the right
-        3: (0, -_STEP_SIZE, 0),  # move upwards
-        4: (0,  _STEP_SIZE, 0),  # move downwards
-    }
     ACTION_NAME_DICT = {
         0: "NOP",
         1: "LEFT",
@@ -29,20 +22,34 @@ class Static2DPhantomUsEnv(PhantomUsEnv):
         super().__init__(**kwargs)
         self.dx_reward_coeff = dx_reward_coeff
         self.dz_reward_coeff = dz_reward_coeff
-        self.action_space = spaces.Discrete(
-            len(Static2DPhantomUsEnv._ACTION_DICT))
+        self.action_space = spaces.Discrete(len(self._get_action_map()))
 
-    def _perform_action(self, action):
-        x_t, z_t, theta_t = Static2DPhantomUsEnv._ACTION_DICT[action]
-        _LOGGER.debug("Moving the probe: %s" % str((x_t, z_t, theta_t)))
-        self._move_focal_point_if_possible(x_t, z_t)
+    def _get_action_map(self):
+        return {
+            0: (0, 0, 0),  # NOP
+            1: (-self.step_size, 0, 0),  # move to the left
+            2: (self.step_size,  0, 0),  # move to the right
+            3: (0, -self.step_size, 0),  # move upwards
+            4: (0,  self.step_size, 0),  # move downwards
+        }
 
-    def get_action_name(self, action):
+    def get_action_name(self, action_number):
         """
         Returns string representation for given action number
         (e.g. when logging trajectory to file)
         """
-        return Static2DPhantomUsEnv.ACTION_NAME_DICT[action] if action is not None else None
+        return {
+            0: "NOP",
+            1: "LEFT",
+            2: "RIGHT",
+            3: "UP",
+            4: "DOWN",
+        }.get(action_number, None)
+
+    def _perform_action(self, action):
+        x_t, z_t, theta_t = self._get_action(action)
+        _LOGGER.debug("Moving the probe: %s" % str((x_t, z_t, theta_t)))
+        self._move_focal_point_if_possible(x_t, z_t)
 
     def _get_reward(self):
         tracked_pos = self.phantom.get_main_object().belly.pos*10 # [mm]
