@@ -1,5 +1,5 @@
-from envs.phantom_env import UsPhantomEnv, random_env_generator
-import envs.phantom_env as phantom_env
+from envs.us_env import PhantomUsEnv, random_env_generator
+import envs.us_env as phantom_env
 import argparse
 import os
 import time
@@ -25,7 +25,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    imaging = phantom_env.Imaging(
+    imaging = phantom_env.ImagingSystem(
         c=1540,
         fs=100e6,
         image_width=40/1000,
@@ -36,7 +36,7 @@ if __name__ == '__main__':
         median_filter_size=5,
         dr_threshold=-100
     )
-    env = UsPhantomEnv(
+    env = PhantomUsEnv(
         imaging=imaging,
         env_generator=random_env_generator(),
         max_steps=args.no_steps,

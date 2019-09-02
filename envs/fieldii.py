@@ -81,7 +81,10 @@ class Field2:
         os.remove(os.path.join(self.working_dir.name, "input.mat"))
         shutil.rmtree(os.path.join(self.working_dir.name, "input.mat.rf"))
         print("...simulation completed.")
-        return (rf_array, t_start)
+        return rf_array, t_start
+
+    def close(self):
+        self._cleanup()
 
     def _save_mat_file(
             self,

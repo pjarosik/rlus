@@ -1,18 +1,7 @@
-%  Example of use of the new Field II program running under 
-%  Matlab.
-%
-%  This example shows how a linear array B-mode system scans an image
-%
-%  This script assumes that the field_init procedure has been called
-%  Here the field simulation is performed and the data is stored
-%  in rf-files; one for each rf-line done. The data must then
-%  subsequently be processed to yield the image. The data for the
-%  scatteres are read from the file pht_data.mat, so that the procedure
-%  can be started again or run for a number of workstations.
-
 % This implementation bases on script 'sim_img.m' from field's II 'cyst example'.
 % 'lockfile' program is required to exclusively lock the work of each thread
 % per scanline. In Ubuntu, it's available in procmail package.
+
 function [] = simulate_linear_array(id, input_path, output_path)
 
     % TODO parametrize?
@@ -42,11 +31,6 @@ function [] = simulate_linear_array(id, input_path, output_path)
     xdc_impulse(receive_aperture, impulse_response);
 
                                 %  Set the different focal zones for reception
-    % RCV FOCAL POINTS
-    focal_zones = [30:20:200]'/1000; % TODO parametrize?
-    Nf = max(size(focal_zones));
-    focus_times = (focal_zones-10/1000)/c; % TODO why -10/1000?
-
     %  Set the apodization
     apo = hanning(N_active)';
     if ~isfolder(output_path)
@@ -74,6 +58,10 @@ function [] = simulate_linear_array(id, input_path, output_path)
             clear point_positions point_amplitudes z_focus no_lines image_width;
             load(input_file, "point_positions", "point_amplitudes", "z_focus", "no_lines", "image_width");
 
+            focal_zones = [z_focus];
+            Nf = max(size(focal_zones));
+            focus_times = (focal_zones-10/1000)/c; % TODO why -10/1000?
+
             %z_focus = 60/1000;                %  Transmit focus, XMIT FOCAL POINT
             %no_lines = 50;                    %  Number of lines in image TODO parametrize
             %image_width = 40/1000;            %  Size of image sector THE WIDTH OF THE ENVIRONMENT
@@ -93,8 +81,8 @@ function [] = simulate_linear_array(id, input_path, output_path)
             for i = 1:no_lines
                 filename = fullfile(example_dir_path, strcat("ln", num2str(i), ".mat"));
                 lock_filename = strcat(filename, ".lock");
-                if ~system(sprintf("lockfile -r 0 %s", lock_filename))
-                    disp(strcat("creating line ", num2str(i))); % TODO debug log, remove it
+                if ~system(sprintf("lockfile -r 0 %s > /tmp/sim_field2_lockfile.log 2>&1", lock_filename))
+                    %disp(strcat("creating line ", num2str(i)));
                                 % We are first in locking this scanline.
                     x= -image_width/2 +(i-1)*d_x;
                                 % Set the focus for this direction with the proper reference point
@@ -112,12 +100,12 @@ function [] = simulate_linear_array(id, input_path, output_path)
                     [rf_data, tstart] = calc_scat(xmit_aperture, receive_aperture, point_positions, point_amplitudes);
                                 %  Store the result
                     save(filename, "i", "rf_data", "tstart");
-                else
-                  disp(['Line ',num2str(i),' is being made by another machine.']) % TODO debug log, remove it
+                % else
+                %  disp(['Line ',num2str(i),' is being made by another worker.'])
                 end
             end
             toc;
-            disp(strcat("Worker ", num2str(id), ' finished job.'))
+            disp(strcat("Worker ", num2str(id), ' finished the job.'))
             fclose(fopen(fullfile(input_path, strcat("ready.", num2str(id))), 'w'))
         end
     end
