@@ -234,12 +234,12 @@ class PhantomUsEnv(gym.Env):
             self.probe = self.probe.change_focal_depth(z_t)
 
     def _get_available_x_pos(self):
-        x_border = self.phantom.x_border()
+        x_border = self.phantom.x_border
         probe_margin = self.probe.width/2
         return x_border[0]+probe_margin, x_border[1]-probe_margin
 
     def _get_available_z_pos(self):
-        return self.phantom.z_border()
+        return self.phantom.z_border
 
     def _get_observation(self):
         if self.use_cache:
