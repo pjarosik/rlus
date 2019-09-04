@@ -27,15 +27,18 @@ def _get_cumulative_l1_distance(ep_dir):
 
 def _compute_mean_std(values, window_size):
     mean, std = [], []
-    for i in range(len(values)):
-        mean.append(np.mean(values[i:i + window_size]))
-        std.append(np.std(values[i:i + window_size]))
-    x = np.linspace(
-        start=window_size/2, stop=len(mean)-window_size/2,
-        num=len(mean))
-    x =  np.concatenate(([0], x, [len(values)]))
-    mean = np.concatenate(([values[0]], mean, [values[-1]]))
-    std = np.concatenate(([0], std, [0]))
+    if window_size % 2:
+        rn = range(-(window_size//2), len(values)-(window_size//2))
+    else:
+        rn = range(-(window_size//2-1), len(values)-(window_size//2-1))
+    for i in rn:
+        l = 0 if i < 0 else i
+        r = i+window_size
+        mean.append(np.mean(values[l:r]))
+        std.append(np.std(values[l:r]))
+    x = np.arange(0, len(values))
+    mean, std = np.array(mean), np.array(std)
+    assert len(x) == len(mean) == len(std)
     # print("Mean")
     # print(mean.tolist())
     # print("Std")
@@ -48,8 +51,8 @@ def plot_reward(
         figsize,
         window_size=40,
         type='reward',
-        max_ep=None
-                ):
+        max_ep=None,
+        dec=50):
     fig, ax = plt.subplots()
     fig.set_size_inches(figsize)
 
@@ -67,19 +70,26 @@ def plot_reward(
         episode_nr += 1
         ep_dir = os.path.join(exp_dir, "episode_%d" % episode_nr)
 
-    def _plot_values(x, mean, std):
-        ax.plot(x, mean)
-        ax.fill_between(x, mean - std, mean + std, alpha=0.2)
+    def _plot_values(x, mean, std, dec):
+        _, caplines, _ = ax.errorbar(
+            x, mean, yerr=std, errorevery=dec,
+            uplims=True, lolims=True)
+        for c in caplines:
+            c.set_marker("_")
+        ax.grid(linestyle="--")
+        # caplines[0].set_markersize(20)
+        # ax.plot(x, mean)
+        # ax.fill_between(x, mean - std, mean + std, alpha=0.2)
 
     if type == "reward":
         x, c_rewards_mean, c_rewards_std = _compute_mean_std(c_rewards, window_size)
-        _plot_values(x, c_rewards_mean, c_rewards_std)
+        _plot_values(x, c_rewards_mean, c_rewards_std, dec=dec)
         ax.set_ylabel('Reward  $R(\\tau)$')
     elif type == "l1":
         x, c_ref_metric_mean, c_ref_metric_std = _compute_mean_std(c_ref_metric, window_size)
-        _plot_values(x, c_ref_metric_mean, c_ref_metric_std)
+        _plot_values(x, c_ref_metric_mean, c_ref_metric_std, dec=dec)
         ax.set_ylabel("Cumulative $L_1$")
-    ax.set_xlabel("Episodes")
+    ax.set_xlabel("Episode")
     fig.savefig(os.path.join(exp_dir, "%s.pdf" % type), dpi=300, bbox_inches='tight')
 
 
