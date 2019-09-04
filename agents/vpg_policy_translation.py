@@ -62,13 +62,14 @@ def env_fn(trajectory_logger):
             ref_probe=probe,
             object_to_align=teddy,
             seed=42,
-            x_pos=[-20/1000, -10/1000, 0/1000, 10/1000, 20/1000],
-            focal_pos = [10/1000]
+            x_pos=np.arange(-20/1000, 30/1000, step=5/1000),
+            focal_pos=[10/1000]
         ),
         max_steps=N_STEPS_PER_EPISODE,
         no_workers=N_WORKERS,
         use_cache=True,
         trajectory_logger=trajectory_logger,
+        step_size=5/1000
     )
     return env
 
@@ -147,7 +148,7 @@ def main():
         log_dir=".",
         log_action_csv_freq=1,
         log_state_csv_freq=1,
-        log_state_render_freq=10
+        log_state_render_freq=200
     )
     spinup_logger_kwargs = dict(output_dir=".", exp_name='log_files')
     env_builder = lambda: env_fn(trajactory_logger)
@@ -158,7 +159,8 @@ def main():
         epochs=EPOCHS,
         max_ep_len=N_STEPS_PER_EPISODE,
         logger_kwargs=spinup_logger_kwargs,
-        save_freq=50
+        save_freq=50,
+        lam=0.8
     )
 
 
