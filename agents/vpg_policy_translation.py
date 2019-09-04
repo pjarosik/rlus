@@ -148,7 +148,7 @@ def main():
         log_dir=".",
         log_action_csv_freq=1,
         log_state_csv_freq=1,
-        log_state_render_freq=200
+        log_state_render_freq=500
     )
     spinup_logger_kwargs = dict(output_dir=".", exp_name='log_files')
     env_builder = lambda: env_fn(trajactory_logger)
@@ -159,8 +159,8 @@ def main():
         epochs=EPOCHS,
         max_ep_len=N_STEPS_PER_EPISODE,
         logger_kwargs=spinup_logger_kwargs,
-        save_freq=50,
-        lam=0.8
+        save_freq=200,
+        lam=0.70
     )
 
 
