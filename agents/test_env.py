@@ -1,5 +1,5 @@
 import numpy as np
-from envs.static_2d_phantom_us_env import Static2DPhantomUsEnv
+from envs.focal_point_task_us_env import FocalPointTaskUsEnv
 from envs.phantom import (
     ScatterersPhantom,
     Ball,
@@ -46,7 +46,7 @@ def env_fn(trajectory_logger, probe_generator, phantom_generator=None):
         dec=1,
         no_lines=64
     )
-    env = Static2DPhantomUsEnv(
+    env = FocalPointTaskUsEnv(
         dx_reward_coeff=2,
         dz_reward_coeff=1,
         imaging=imaging,

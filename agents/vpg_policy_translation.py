@@ -2,7 +2,7 @@ from spinup import vpg
 import tensorflow as tf
 import numpy as np
 from gym.spaces import Box, Discrete
-from envs.static_2d_phantom_us_env import Static2DPhantomUsEnv
+from envs.focal_point_task_us_env import FocalPointTaskUsEnv
 from envs.phantom import (
     ScatterersPhantom,
     Ball,
@@ -53,7 +53,7 @@ def env_fn(trajectory_logger):
         dec=1,
         no_lines=64
     )
-    env = Static2DPhantomUsEnv(
+    env = FocalPointTaskUsEnv(
         dx_reward_coeff=1,
         dz_reward_coeff=1,
         imaging=imaging,
@@ -137,7 +137,7 @@ def main():
     matplotlib.use('agg')
 
     parser = argparse.ArgumentParser(description="Train agent in env: %s" %
-                                                 Static2DPhantomUsEnv.__name__)
+                                                 FocalPointTaskUsEnv.__name__)
     parser.add_argument("--exp_dir", dest="exp_dir",
                         help="Where to put all information about the experiment",
                         required=True)

@@ -133,13 +133,17 @@ class PhantomUsEnv(gym.Env):
         Returns:
             observation, reward, is episode over?, diagnostic info (currently empty dict)
         """
+        # perform action -> compute reward -> _udpdate_state() -> get_observation -> log state
         if self.current_step >= self.max_steps:
             raise RuntimeError("This episode is over, reset the environment.")
         self.current_step += 1
         self._perform_action(action)
+        reward = self._get_reward()
+        # Update current state independently to the action
+        # (for example apply shaking noise to the probe position).
+        self._update_state()
         o = self._get_observation()
         self.current_observation = o
-        reward = self._get_reward()
         episode_over = self.current_step >= self.max_steps
 
         if self.trajectory_logger is not None:
@@ -193,6 +197,14 @@ class PhantomUsEnv(gym.Env):
             "obj_z": self.phantom.get_main_object().belly.pos[2],
             "obj_angle": self.phantom.get_main_object().angle
         }
+
+    def _get_reward(self):
+        # TO IMPLEMENT
+        raise NotImplementedError
+
+    def _update_state(self):
+        # TO IMPLEMENT
+        raise NotImplementedError
 
     def _perform_action(self, action):
         x_t, z_t, theta_t = self._get_action(action)
@@ -253,15 +265,6 @@ class PhantomUsEnv(gym.Env):
         bmode = bmode.reshape(bmode.shape+(1,))
         _LOGGER.debug("B-mode image shape: %s" % str(bmode.shape))
         return bmode
-
-    def _get_reward(self):
-        tracked_pos = self.phantom.get_main_object().belly.pos * 1000  # [mm]
-        current_pos = self.probe.get_focal_point_pos() * 1000  # [mm]
-        distance = np.sqrt(np.sum(np.square(tracked_pos - current_pos)))
-        probe_angle = self.probe.angle % 360
-        tracked_angle = self.phantom.get_main_object().angle % 360
-        angle_diff_cos = math.cos(math.radians(probe_angle-tracked_angle))
-        return -distance + self.angle_reward_coeff*abs(angle_diff_cos)
 
     def _render_to_array(self, views):
         fig = plt.figure(figsize=(4, 4), dpi=200)

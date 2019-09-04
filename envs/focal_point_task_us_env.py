@@ -2,11 +2,12 @@ from .us_env import PhantomUsEnv
 from gym import spaces
 import logging
 import numpy as np
+import random
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class Static2DPhantomUsEnv(PhantomUsEnv):
+class FocalPointTaskUsEnv(PhantomUsEnv):
     _STEP_SIZE = 10/1000  # [m]
     _ROT_DEG = 10  # [degrees]
 
@@ -18,8 +19,25 @@ class Static2DPhantomUsEnv(PhantomUsEnv):
         4: "DOWN",
     }
 
-    def __init__(self, dx_reward_coeff, dz_reward_coeff, **kwargs):
+    def __init__(
+            self,
+            dx_reward_coeff,
+            dz_reward_coeff,
+            probe_dislocation_prob=0,
+            max_probe_dislocation=2,
+            **kwargs):
+        """
+        Args:
+            dx_reward_coeff: L1 dx multiplier
+            dz_reward_coeff: L1 dz multiplier
+            probe_dislocation_prob: the probability, that probe will be randomly
+            dislocated in given timestep
+            max_probe_dislocation: maximum random probe dislocation, that can
+            be performed, in the number of self.step_sizes
+        """
         super().__init__(**kwargs)
+        self.max_probe_disloc = max_probe_dislocation
+        self.probe_dislocation_prob = probe_dislocation_prob
         self.dx_reward_coeff = dx_reward_coeff
         self.dz_reward_coeff = dz_reward_coeff
         self.action_space = spaces.Discrete(len(self._get_action_map()))
@@ -58,3 +76,11 @@ class Static2DPhantomUsEnv(PhantomUsEnv):
         dz = np.abs(tracked_pos[2]-current_pos[2])
         reward = -(self.dx_reward_coeff * dx + self.dz_reward_coeff * dz)
         return reward
+
+    def _update_state(self):
+        if random.random() < self.probe_dislocation_prob:
+            # draw a random dislocation
+            x_disl = random.choice(
+                range(-self.max_probe_disloc, self.max_probe_disloc+1))
+            x_disl *= self.step_size
+            self._move_focal_point_if_possible(x_t=x_disl, z_t=0)
