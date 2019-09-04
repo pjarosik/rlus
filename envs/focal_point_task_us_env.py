@@ -8,23 +8,13 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class FocalPointTaskUsEnv(PhantomUsEnv):
-    _STEP_SIZE = 10/1000  # [m]
-    _ROT_DEG = 10  # [degrees]
-
-    ACTION_NAME_DICT = {
-        0: "NOP",
-        1: "LEFT",
-        2: "RIGHT",
-        3: "UP",
-        4: "DOWN",
-    }
-
     def __init__(
             self,
             dx_reward_coeff,
             dz_reward_coeff,
             probe_dislocation_prob=0,
             max_probe_dislocation=2,
+            dislocation_seed=None,
             **kwargs):
         """
         Args:
@@ -41,6 +31,10 @@ class FocalPointTaskUsEnv(PhantomUsEnv):
         self.dx_reward_coeff = dx_reward_coeff
         self.dz_reward_coeff = dz_reward_coeff
         self.action_space = spaces.Discrete(len(self._get_action_map()))
+        if dislocation_seed:
+            self.dislocation_rng = random.Random(dislocation_seed)
+        else:
+            self.dislocation_rng = None
 
     def _get_action_map(self):
         return {
@@ -70,7 +64,7 @@ class FocalPointTaskUsEnv(PhantomUsEnv):
         self._move_focal_point_if_possible(x_t, z_t)
 
     def _get_reward(self):
-        tracked_pos = self.phantom.get_main_object().belly.pos*10 # [mm]
+        tracked_pos = self.phantom.get_main_object().belly.pos*10
         current_pos = np.array([self.probe.pos[0], 0, self.probe.focal_depth])*10
         dx = np.abs(tracked_pos[0]-current_pos[0])
         dz = np.abs(tracked_pos[2]-current_pos[2])
@@ -78,9 +72,11 @@ class FocalPointTaskUsEnv(PhantomUsEnv):
         return reward
 
     def _update_state(self):
-        if random.random() < self.probe_dislocation_prob:
+
+        if self.dislocation_rng and \
+           self.dislocation_rng.random() < self.probe_dislocation_prob:
             # draw a random dislocation
-            x_disl = random.choice(
+            x_disloc = random.choice(
                 range(-self.max_probe_disloc, self.max_probe_disloc+1))
-            x_disl *= self.step_size
-            self._move_focal_point_if_possible(x_t=x_disl, z_t=0)
+            x_disloc *= self.step_size
+            self._move_focal_point_if_possible(x_t=x_disloc, z_t=0)

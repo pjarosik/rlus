@@ -96,8 +96,8 @@ class PhantomUsEnv(gym.Env):
             2: "RIGHT",
             3: "UP",
             4: "DOWN",
-            5: "ROT_L",
-            6: "ROT_R"
+            5: "ROT_C",
+            6: "ROT_CC"
         }.get(action_number, None)
 
     def reset(self):
@@ -232,6 +232,14 @@ class PhantomUsEnv(gym.Env):
             self.probe = self.probe.translate(np.array([x_t, 0, 0]))
         if le(z_border_l, pr_pos_z) and ge(z_border_r, pr_pos_z):
             self.probe = self.probe.change_focal_depth(z_t)
+
+    def _get_available_x_pos(self):
+        x_border = self.phantom.x_border()
+        probe_margin = self.probe.width/2
+        return x_border[0]+probe_margin, x_border[1]-probe_margin
+
+    def _get_available_z_pos(self):
+        return self.phantom.z_border()
 
     def _get_observation(self):
         if self.use_cache:
