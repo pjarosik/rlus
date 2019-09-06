@@ -41,23 +41,23 @@ def anim(exp_dir,
         if internal_ep_nr % step == 0:
             env_path_pattern = os.path.join(ep_dir, "env_step_%03d.png")
             obs_path_pattern = os.path.join(ep_dir, "observation_step_%03d.png")
-            step = 0
-            while os.path.exists(env_path_pattern % step) and \
-                  os.path.exists(obs_path_pattern % step):
+            s = 0
+            while os.path.exists(env_path_pattern % s) and \
+                  os.path.exists(obs_path_pattern % s):
 
-                env = Image.open(env_path_pattern % step)
-                obs = Image.open(obs_path_pattern % step)
+                env = Image.open(env_path_pattern % s)
+                obs = Image.open(obs_path_pattern % s)
                 if width and height:
                     env = env.resize((width, height), Image.ANTIALIAS)
                     obs = obs.resize((width, height), Image.ANTIALIAS)
                 img = _merge(env, obs)
                 draw = ImageDraw.Draw(img)
-                text = "Episode: %04d Step: %02d" % (episode_nr, step)
-                if step > 0:
-                    text = text + " Reward %.02f" % rewards[step-1]
+                text = "Episode: %04d Step: %02d" % (episode_nr, s)
+                if s > 0:
+                    text = text + " Reward %.02f" % rewards[s-1]
                 draw.text((10, 10), text, (0, 0, 0), font=font)
                 frames.append(img)
-                step += 1
+                s += 1
             internal_ep_nr += 1
         episode_nr += 1
         ep_dir = os.path.join(exp_dir, "episode_%d" % episode_nr)
