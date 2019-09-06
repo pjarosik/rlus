@@ -27,7 +27,8 @@ def anim(exp_dir,
          font=None,
          font_size=None,
          width=None,
-         height=None):
+         height=None,
+         ep_pause=None):
     episode_nr = min_ep
     internal_ep_nr = 0
     frames = []
@@ -42,6 +43,7 @@ def anim(exp_dir,
             env_path_pattern = os.path.join(ep_dir, "env_step_%03d.png")
             obs_path_pattern = os.path.join(ep_dir, "observation_step_%03d.png")
             s = 0
+            img = None
             while os.path.exists(env_path_pattern % s) and \
                   os.path.exists(obs_path_pattern % s):
 
@@ -58,6 +60,8 @@ def anim(exp_dir,
                 draw.text((10, 10), text, (0, 0, 0), font=font)
                 frames.append(img)
                 s += 1
+            if ep_pause:
+                frames.extend([img]*(ep_pause-1))
             internal_ep_nr += 1
         episode_nr += 1
         ep_dir = os.path.join(exp_dir, "episode_%d" % episode_nr)
@@ -117,12 +121,19 @@ if __name__ == "__main__":
                         type=int,
                         default=None,
                         required=False)
+    parser.add_argument("--ep_pause", dest="ep_pause",
+                        help="How many times the last step of each episode "
+                             "should be displayed (adds short pause at the "
+                             "end of the episode).",
+                        type=int,
+                        default=None,
+                        required=False)
 
     args = parser.parse_args()
     anim(
         args.exp_dir, min_ep=args.min_ep, max_ep=args.max_ep, step=args.step,
         interval=args.interval, font=args.font, font_size=args.font_size,
-        width=args.width, height=args.height)
+        width=args.width, height=args.height, ep_pause=args.ep_pause)
 
 
 
