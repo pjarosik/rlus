@@ -19,7 +19,15 @@ def _get_rewards(ep_dir):
         return [float(row['reward']) for row in reader]
 
 
-def anim(exp_dir, min_ep=0, max_ep=None, step=1, interval=100, font=None, font_size=None):
+def anim(exp_dir,
+         min_ep=0,
+         max_ep=None,
+         step=1,
+         interval=100,
+         font=None,
+         font_size=None,
+         width=None,
+         height=None):
     episode_nr = min_ep
     internal_ep_nr = 0
     frames = []
@@ -39,6 +47,9 @@ def anim(exp_dir, min_ep=0, max_ep=None, step=1, interval=100, font=None, font_s
 
                 env = Image.open(env_path_pattern % step)
                 obs = Image.open(obs_path_pattern % step)
+                if width and height:
+                    env = env.resize((width, height), Image.ANTIALIAS)
+                    obs = obs.resize((width, height), Image.ANTIALIAS)
                 img = _merge(env, obs)
                 draw = ImageDraw.Draw(img)
                 text = "Episode: %04d Step: %02d" % (episode_nr, step)
@@ -95,11 +106,23 @@ if __name__ == "__main__":
                         type=int,
                         default=None,
                         required=False)
+    parser.add_argument("--width", dest="width",
+                        help="Width of the image with state/observation ("
+                             "output GIF will have width = 2*state_width). ",
+                        type=int,
+                        default=None,
+                        required=False)
+    parser.add_argument("--height", dest="height",
+                        help="Height of the image with state/observation.",
+                        type=int,
+                        default=None,
+                        required=False)
 
     args = parser.parse_args()
     anim(
         args.exp_dir, min_ep=args.min_ep, max_ep=args.max_ep, step=args.step,
-        interval=args.interval, font=args.font, font_size=args.font_size)
+        interval=args.interval, font=args.font, font_size=args.font_size,
+        width=args.width, height=args.height)
 
 
 
