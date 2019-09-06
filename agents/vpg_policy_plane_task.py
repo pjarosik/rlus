@@ -2,7 +2,7 @@ from spinup import vpg
 import tensorflow as tf
 import numpy as np
 from gym.spaces import Box, Discrete
-from envs.focal_point_task_us_env import FocalPointTaskUsEnv
+from envs.plane_task_us_env import PlaneTaskUsEnv
 from envs.phantom import (
     ScatterersPhantom,
     Ball,
@@ -14,9 +14,9 @@ import envs.logger
 import matplotlib
 import argparse
 
-N_STEPS_PER_EPISODE =  16
+N_STEPS_PER_EPISODE = 16
 N_STEPS_PER_EPOCH = 64
-EPOCHS = 251 # NO_EPISODES = (NSTEPS_PER_EPOCH/NSTEPS_PER_EPISODE)*EPOCHS
+EPOCHS = 500 # NO_EPISODES = (NSTEPS_PER_EPOCH/NSTEPS_PER_EPISODE)*EPOCHS
 N_WORKERS = 4
 
 
@@ -53,23 +53,25 @@ def env_fn(trajectory_logger):
         dec=1,
         no_lines=64
     )
-    env = FocalPointTaskUsEnv(
+    env = PlaneTaskUsEnv(
         dx_reward_coeff=1,
-        dz_reward_coeff=1,
+        angle_reward_coeff=1,
         imaging=imaging,
         phantom_generator=ConstPhantomGenerator(phantom),
         probe_generator=RandomProbeGenerator(
             ref_probe=probe,
             object_to_align=teddy,
             seed=42,
-            x_pos=np.arange(-20/1000, 30/1000, step=5/1000),
-            focal_pos=[10/1000]
+            x_pos=[0],# np.arange(-10/1000, 14/1000, step=5/1000),
+            focal_pos=[50/1000], # same as for Teddy
+            angle=[60]
         ),
         max_steps=N_STEPS_PER_EPISODE,
         no_workers=N_WORKERS,
         use_cache=True,
         trajectory_logger=trajectory_logger,
-        step_size=5/1000
+        step_size=5/1000,
+        rot_deg=20
     )
     return env
 
@@ -137,7 +139,7 @@ def main():
     matplotlib.use('agg')
 
     parser = argparse.ArgumentParser(description="Train agent in env: %s" %
-                                                 FocalPointTaskUsEnv.__name__)
+                                                 PlaneTaskUsEnv.__name__)
     parser.add_argument("--exp_dir", dest="exp_dir",
                         help="Where to put all information about the experiment",
                         required=True)
@@ -160,7 +162,7 @@ def main():
         max_ep_len=N_STEPS_PER_EPISODE,
         logger_kwargs=spinup_logger_kwargs,
         save_freq=200,
-        lam=0.70
+        lam=0.97
     )
 
 

@@ -41,11 +41,12 @@ class PlaneTaskUsEnv(PhantomUsEnv):
 
     def _get_action_map(self):
         return {
+            # x, y, theta
             0: (0, 0, 0),  # NOP
             1: (-self.step_size, 0, 0),
             2: (self.step_size,  0, 0),
-            3: (0, -self.rot_deg, 0),
-            4: (0,  self.rot_deg, 0),
+            3: (0, 0, -self.rot_deg),
+            4: (0, 0, self.rot_deg),
         }
 
     def get_action_name(self, action_number):
@@ -98,13 +99,15 @@ class PlaneTaskUsEnv(PhantomUsEnv):
             # draw, whether we rotate or accidentally move the probe
             if self.dislocation_rng.random() < 0.5:
                 # Dislocate probe on along OX axis.
-                x_disloc = random.choice(
-                    range(-self.max_probe_disloc, self.max_probe_disloc+1))
+                x_disloc = self.dislocation_rng.choice(
+                    list(range(-self.max_probe_disloc, 0)) +
+                    list(range(1, self.max_probe_disloc+1)))
                 x_disloc *= self.step_size
                 self._move_focal_point_if_possible(x_t=x_disloc, z_t=0)
             else:
-                disrot = random.choice(
-                    range(-self.max_probe_disrot, self.max_probe_disrot+1))
+                disrot = self.dislocation_rng.choice(
+                    list(range(-self.max_probe_disrot, 0)) +
+                    list(range(1, self.max_probe_disrot+1)))
                 disrot *= self.rot_deg
                 self.probe.rotate(disrot)
 

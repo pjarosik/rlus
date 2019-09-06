@@ -64,19 +64,26 @@ class FocalPointTaskUsEnv(PhantomUsEnv):
         self._move_focal_point_if_possible(x_t, z_t)
 
     def _get_reward(self):
-        tracked_pos = self.phantom.get_main_object().belly.pos*10
-        current_pos = np.array([self.probe.pos[0], 0, self.probe.focal_depth])*10
+        tracked_pos = self.phantom.get_main_object().belly.pos
+        current_pos = np.array([self.probe.pos[0], 0, self.probe.focal_depth])
         dx = np.abs(tracked_pos[0]-current_pos[0])
         dz = np.abs(tracked_pos[2]-current_pos[2])
+
+        av_x_l, av_x_r = self._get_available_x_pos()
+        av_z_l, av_z_r = self._get_available_z_pos()
+        max_dx = max(abs(tracked_pos[0]-av_x_l), abs(tracked_pos[0]-av_x_r))
+        max_dz = max(abs(tracked_pos[2]-av_z_l), abs(tracked_pos[2]-av_z_r))
+        dx = dx/max_dx
+        dz = dz/max_dz
         reward = -(self.dx_reward_coeff * dx + self.dz_reward_coeff * dz)
         return reward
 
     def _update_state(self):
-
         if self.dislocation_rng and \
            self.dislocation_rng.random() < self.probe_dislocation_prob:
             # draw a random dislocation
-            x_disloc = random.choice(
-                range(-self.max_probe_disloc, self.max_probe_disloc+1))
+            x_disloc = self.dislocation_rng.choice(
+                list(range(-self.max_probe_disloc, 0)) +
+                list(range(1, self.max_probe_disloc+1)))
             x_disloc *= self.step_size
             self._move_focal_point_if_possible(x_t=x_disloc, z_t=0)

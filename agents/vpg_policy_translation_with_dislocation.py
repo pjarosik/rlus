@@ -14,8 +14,8 @@ import envs.logger
 import matplotlib
 import argparse
 
-N_STEPS_PER_EPISODE =  16
-N_STEPS_PER_EPOCH = 64
+N_STEPS_PER_EPISODE =  32
+N_STEPS_PER_EPOCH = 128
 EPOCHS = 251 # NO_EPISODES = (NSTEPS_PER_EPOCH/NSTEPS_PER_EPISODE)*EPOCHS
 N_WORKERS = 4
 
@@ -62,14 +62,17 @@ def env_fn(trajectory_logger):
             ref_probe=probe,
             object_to_align=teddy,
             seed=42,
-            x_pos=np.arange(-20/1000, 30/1000, step=5/1000),
+            x_pos=np.arange(-20/1000, 24/1000, step=5/1000),
             focal_pos=[10/1000]
         ),
         max_steps=N_STEPS_PER_EPISODE,
         no_workers=N_WORKERS,
         use_cache=True,
         trajectory_logger=trajectory_logger,
-        step_size=5/1000
+        step_size=5/1000,
+        probe_dislocation_prob=1/20, # between 1/16 and 1/32
+        max_probe_dislocation=2,
+        dislocation_seed=42
     )
     return env
 
@@ -148,7 +151,7 @@ def main():
         log_dir=".",
         log_action_csv_freq=1,
         log_state_csv_freq=1,
-        log_state_render_freq=500
+        log_state_render_freq=1000
     )
     spinup_logger_kwargs = dict(output_dir=".", exp_name='log_files')
     env_builder = lambda: env_fn(trajactory_logger)
@@ -160,7 +163,7 @@ def main():
         max_ep_len=N_STEPS_PER_EPISODE,
         logger_kwargs=spinup_logger_kwargs,
         save_freq=200,
-        lam=0.70
+        lam=0.7
     )
 
 
