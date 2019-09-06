@@ -25,8 +25,8 @@ def anim(exp_dir, min_ep=0, max_ep=None, step=1, interval=100, font=None, font_s
     frames = []
     ep_dir = os.path.join(exp_dir, "episode_%d" % episode_nr)
     font = ImageFont.truetype(font=font, size=font_size) if font else None
-    while os.path.exists(os.path.join(ep_dir, "env_step_000.png")) and \
-          os.path.exists(os.path.join(ep_dir, "observation_step_000.png")) and \
+    while os.path.exists(os.path.join(ep_dir, "action.csv")) and \
+          os.path.exists(os.path.join(ep_dir, "state.csv")) and \
           (max_ep is None or episode_nr <= max_ep):
 
         rewards = _get_rewards(ep_dir)
