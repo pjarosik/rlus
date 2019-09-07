@@ -14,10 +14,10 @@ class PlaneTaskUsEnv(PhantomUsEnv):
             angle_range=None,
             dx_reward_coeff=1,
             angle_reward_coeff=1,
-            probe_dislocation_prob=0,
-            max_probe_disloc=1,
-            max_probe_disrot=1,
-            dislocation_seed=42,
+            probe_dislocation_prob=None,
+            max_probe_disloc=None,
+            max_probe_disrot=None,
+            dislocation_seed=None,
             **kwargs):
         """
         Args:
