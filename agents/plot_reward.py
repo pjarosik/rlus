@@ -4,35 +4,39 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
+AGGR = {
+    "mean": np.mean,
+    "sum": np.sum
+}
 
 
-def _get_cumulative_reward(ep_dir):
+def _get_cumulative_reward(ep_dir, aggr="sum"):
     with open(os.path.join(ep_dir, 'action.csv')) as f:
         reader = csv.DictReader(f, delimiter='\t')
-        rewards = [float(row['reward']) for row in reader]
-        return sum(rewards)
+        rewards = np.array([float(row['reward']) for row in reader])
+        return AGGR[aggr](rewards)
 
 
-def _get_cumulative_l1_distance(ep_dir):
+def _get_cumulative_l1_distance(ep_dir, aggr="sum"):
     with open(os.path.join(ep_dir, 'state.csv')) as f:
         reader = csv.DictReader(f, delimiter='\t')
         poss = np.array([
             (float(row['probe_x']), float(row['probe_z']), float(row['obj_x']), float(row['obj_z']))
             for row in reader
         ])
-    probe_pos = poss[:2, :]
-    obj_pos = poss[2:, :]
+    probe_pos = poss[:, :2]
+    obj_pos = poss[:, 2:]
     ret = np.abs(probe_pos-obj_pos)
-    ret = np.sum(ret)
+    ret = AGGR[aggr](ret)
     return ret
 
 
-def _get_cumulative_angle_diff(ep_dir):
+def _get_cumulative_angle_diff(ep_dir, aggr="sum"):
     with open(os.path.join(ep_dir, 'state.csv')) as f:
         reader = csv.DictReader(f, delimiter='\t')
         angles = np.array([(float(row['probe_angle']), float(row['obj_angle'])) for row in reader])
-    ret = np.abs((angles[0, :]%360)-(angles[1, :]%360))
-    ret = np.sum(ret)
+    ret = np.abs((angles[:, 0]%360)-(angles[:, 1]%360))
+    ret = AGGR[aggr](ret)
     return ret
 
 
@@ -63,7 +67,9 @@ def plot_reward(
         window_size=40,
         type='reward',
         max_ep=None,
-        dec=50):
+        dec=50,
+        aggr="sum"
+):
     fig, ax = plt.subplots()
     fig.set_size_inches(figsize)
 
@@ -77,9 +83,9 @@ def plot_reward(
     while os.path.exists(os.path.join(ep_dir, "action.csv")) and \
           os.path.exists(os.path.join(ep_dir, "state.csv")) and \
           (max_ep is None or episode_nr <= max_ep):
-        c_rewards.append(_get_cumulative_reward(ep_dir))
-        c_ref_metric.append(_get_cumulative_l1_distance(ep_dir))
-        c_angle_metric.append(_get_cumulative_angle_diff(ep_dir))
+        c_rewards.append(_get_cumulative_reward(ep_dir, aggr=aggr))
+        c_ref_metric.append(_get_cumulative_l1_distance(ep_dir, aggr=aggr))
+        c_angle_metric.append(_get_cumulative_angle_diff(ep_dir, aggr=aggr))
         episode_nr += 1
         ep_dir = os.path.join(exp_dir, "episode_%d" % episode_nr)
 
@@ -105,7 +111,7 @@ def plot_reward(
     elif type == "angle":
         x, c_angle_mean, c_angle_std = _compute_mean_std(c_angle_metric, window_size)
         _plot_values(x, c_angle_mean, c_angle_std, dec=dec)
-        ax.set_ylabel('Cumulative $\Delta \theta$')
+        ax.set_ylabel('Cumulative $\Delta \\alpha$')
     ax.set_xlabel("Episode")
     fig.savefig(os.path.join(exp_dir, "%s.pdf" % type), dpi=300, bbox_inches='tight')
 
@@ -118,8 +124,13 @@ if __name__ == "__main__":
                         required=True)
     parser.add_argument("--type", dest="type",
                         help="Type of the plot to produce.",
-                        choices=["reward", "l1"],
+                        choices=["reward", "l1", "angle"],
                         required=True)
+    parser.add_argument("--aggr", dest="aggr",
+                        help="Episode return aggregation type.",
+                        choices=["sum", "mean"],
+                        required=False,
+                        default="sum")
     parser.add_argument("--max_ep", dest="max_ep",
                         help="Maximum number of episodes to consider.",
                         type=int,
@@ -133,7 +144,7 @@ if __name__ == "__main__":
     window_size = 40
     plot_reward(args.exp_dir, figsize=figsize,
                 window_size=window_size, type=args.type,
-                max_ep=args.max_ep)
+                max_ep=args.max_ep, aggr=args.aggr)
 
 
 
