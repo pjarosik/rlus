@@ -11,6 +11,7 @@ _LOGGER = logging.getLogger(__name__)
 class PlaneTaskUsEnv(PhantomUsEnv):
     def __init__(
             self,
+            angle_range=None,
             dx_reward_coeff=1,
             angle_reward_coeff=1,
             probe_dislocation_prob=0,
@@ -28,6 +29,7 @@ class PlaneTaskUsEnv(PhantomUsEnv):
             be performed, in the number of self.step_sizes
         """
         super().__init__(**kwargs)
+        self.angle_range = angle_range
         self.angle_reward_coeff = angle_reward_coeff
         self.dx_reward_coeff = dx_reward_coeff
         self.max_probe_disrot = max_probe_disrot
@@ -67,7 +69,10 @@ class PlaneTaskUsEnv(PhantomUsEnv):
         z_t = 0
         _LOGGER.debug("Executing action: %s" % str((x_t, z_t, theta_t)))
         self._move_focal_point_if_possible(x_t, z_t)
-        self.probe = self.probe.rotate(theta_t)
+        p = self.probe.rotate(theta_t)
+        if self.angle_range is None or self._is_in_angle_range(p.angle):
+            self.probe = p
+
 
     def _get_ox_l1_distance(self):
         # use only OX distance
@@ -110,4 +115,8 @@ class PlaneTaskUsEnv(PhantomUsEnv):
                     list(range(1, self.max_probe_disrot+1)))
                 disrot *= self.rot_deg
                 self.probe.rotate(disrot)
+
+    def _is_in_angle_range(self, angle):
+        left, right = self.angle_range
+        return left <= angle <= right
 
