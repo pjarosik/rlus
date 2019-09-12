@@ -18,6 +18,7 @@ class PlaneTaskUsEnv(PhantomUsEnv):
             max_probe_disloc=None,
             max_probe_disrot=None,
             dislocation_seed=None,
+            reward_fn=None,
             **kwargs):
         """
         Args:
@@ -29,6 +30,7 @@ class PlaneTaskUsEnv(PhantomUsEnv):
             be performed, in the number of self.step_sizes
         """
         super().__init__(**kwargs)
+        self.reward_fn = reward_fn
         self.angle_range = angle_range
         self.angle_reward_coeff = angle_reward_coeff
         self.dx_reward_coeff = dx_reward_coeff
@@ -86,17 +88,20 @@ class PlaneTaskUsEnv(PhantomUsEnv):
         return dx/max_dx
 
     def _get_reward(self):
-        # use only OX distance
-        distance = self._get_ox_l1_distance() # \in [0,1], 0 is better
-        probe_angle = self.probe.angle % 360
-        tracked_angle = self.phantom.get_main_object().angle % 360
-        angle_diff_sin = math.sin(math.radians(probe_angle - tracked_angle))
-        # \in [0,1], 0 is better
-        # why not just use difference between angles?
-        # "Convert" to reward.
-        dist_reward = -distance
-        angle_reward = -abs(angle_diff_sin)
-        return self.dx_reward_coeff*dist_reward + self.angle_reward_coeff*angle_reward
+        if self.reward_fn:
+            return self.reward_fn(self)
+        else:
+            # use only OX distance
+            distance = self._get_ox_l1_distance() # \in [0,1], 0 is better
+            probe_angle = self.probe.angle % 360
+            tracked_angle = self.phantom.get_main_object().angle % 360
+            angle_diff_sin = math.sin(math.radians(probe_angle - tracked_angle))
+            # \in [0,1], 0 is better
+            # why not just use difference between angles?
+            # "Convert" to reward.
+            dist_reward = -distance
+            angle_reward = -abs(angle_diff_sin)
+            return self.dx_reward_coeff*dist_reward + self.angle_reward_coeff*angle_reward
 
     def _update_state(self):
         if self.dislocation_rng and \
