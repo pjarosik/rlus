@@ -16,7 +16,7 @@ import argparse
 
 N_STEPS_PER_EPISODE = 16
 N_STEPS_PER_EPOCH = 64
-EPOCHS = 500 # NO_EPISODES = (NSTEPS_PER_EPOCH/NSTEPS_PER_EPISODE)*EPOCHS
+EPOCHS = 251 # NO_EPISODES = (NSTEPS_PER_EPOCH/NSTEPS_PER_EPISODE)*EPOCHS
 N_WORKERS = 4
 
 
@@ -62,16 +62,16 @@ def env_fn(trajectory_logger):
             ref_probe=probe,
             object_to_align=teddy,
             seed=42,
-            x_pos=[0],# np.arange(-10/1000, 14/1000, step=5/1000),
+            x_pos= np.arange(-15/1000, 19/1000, step=5/1000),
             focal_pos=[50/1000], # same as for Teddy
-            angle=[60]
+            angle=[45, 60, 75, 90]
         ),
         max_steps=N_STEPS_PER_EPISODE,
         no_workers=N_WORKERS,
         use_cache=True,
         trajectory_logger=trajectory_logger,
         step_size=5/1000,
-        rot_deg=20
+        rot_deg=15
     )
     return env
 
@@ -137,6 +137,8 @@ def cnn_actor_critic(x, a, training_ph, hidden_sizes=(64, 64),
 
 def main():
     matplotlib.use('agg')
+    np.random.seed(2442)
+
 
     parser = argparse.ArgumentParser(description="Train agent in env: %s" %
                                                  PlaneTaskUsEnv.__name__)
@@ -150,7 +152,7 @@ def main():
         log_dir=".",
         log_action_csv_freq=1,
         log_state_csv_freq=1,
-        log_state_render_freq=500
+        log_state_render_freq=2500
     )
     spinup_logger_kwargs = dict(output_dir=".", exp_name='log_files')
     env_builder = lambda: env_fn(trajactory_logger)
@@ -162,7 +164,8 @@ def main():
         max_ep_len=N_STEPS_PER_EPISODE,
         logger_kwargs=spinup_logger_kwargs,
         save_freq=200,
-        lam=0.97
+        lam=0.89,
+        pi_lr=1e-4
     )
 
 

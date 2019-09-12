@@ -14,8 +14,8 @@ import envs.logger
 import matplotlib
 import argparse
 
-N_STEPS_PER_EPISODE =  32
-N_STEPS_PER_EPOCH = 128
+N_STEPS_PER_EPISODE = 16
+N_STEPS_PER_EPOCH = 64
 EPOCHS = 251 # NO_EPISODES = (NSTEPS_PER_EPOCH/NSTEPS_PER_EPISODE)*EPOCHS
 N_WORKERS = 4
 
@@ -70,9 +70,9 @@ def env_fn(trajectory_logger):
         use_cache=True,
         trajectory_logger=trajectory_logger,
         step_size=5/1000,
-        probe_dislocation_prob=1/20, # between 1/16 and 1/32
-        max_probe_dislocation=2,
-        dislocation_seed=42
+        # probe_dislocation_prob=0,
+        # max_probe_dislocation=2,
+        # dislocation_seed=42
     )
     return env
 
@@ -138,6 +138,7 @@ def cnn_actor_critic(x, a, training_ph, hidden_sizes=(64, 64),
 
 def main():
     matplotlib.use('agg')
+    np.random.seed(2442)
 
     parser = argparse.ArgumentParser(description="Train agent in env: %s" %
                                                  FocalPointTaskUsEnv.__name__)
@@ -151,7 +152,7 @@ def main():
         log_dir=".",
         log_action_csv_freq=1,
         log_state_csv_freq=1,
-        log_state_render_freq=1000
+        log_state_render_freq=200
     )
     spinup_logger_kwargs = dict(output_dir=".", exp_name='log_files')
     env_builder = lambda: env_fn(trajactory_logger)
@@ -163,7 +164,7 @@ def main():
         max_ep_len=N_STEPS_PER_EPISODE,
         logger_kwargs=spinup_logger_kwargs,
         save_freq=200,
-        lam=0.7
+        lam=0.95
     )
 
 

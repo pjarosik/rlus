@@ -35,8 +35,8 @@ def env_fn(trajectory_logger):
     )
     phantom = ScatterersPhantom(
         objects=[teddy],
-        x_border=(-40 / 1000, 40 / 1000),
-        y_border=(-40 / 1000, 40 / 1000),
+        x_border=(-45 / 1000, 45 / 1000),
+        y_border=(-45 / 1000, 45 / 1000),
         z_border=(0, 90 / 1000),
         n_scatterers=int(1e4),
         n_bck_scatterers=int(1e3),
@@ -62,7 +62,7 @@ def env_fn(trajectory_logger):
             ref_probe=probe,
             object_to_align=teddy,
             seed=42,
-            x_pos=np.arange(-20/1000, 30/1000, step=5/1000),
+            x_pos=np.arange(-25/1000, 29/1000, step=5/1000),
             focal_pos=[10/1000]
         ),
         max_steps=N_STEPS_PER_EPISODE,
@@ -160,7 +160,7 @@ def main():
         max_ep_len=N_STEPS_PER_EPISODE,
         logger_kwargs=spinup_logger_kwargs,
         save_freq=200,
-        lam=0.70
+        lam=0.97
     )
 
 

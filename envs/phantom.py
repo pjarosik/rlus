@@ -229,6 +229,7 @@ class ScatterersPhantom:
         self.bck_amp = 1
         self.obj_amp = 10
         self.rng = np.random.RandomState(seed=seed)
+        self.py_rng = random.Random(seed)
 
     def translate(self, t):
         """
@@ -297,7 +298,7 @@ class ScatterersPhantom:
         # Reduce the number of background point (to decrease computation time)
         objects_points = points[points_idx]
         background_points = points[np.logical_not(points_idx)]
-        background_sample = rng.sample(
+        background_sample = self.py_rng.sample(
             list(range(background_points.shape[0])),
             min(self.n_bck_scatterers, background_points.shape[0]))
         background_points = background_points[background_sample]
