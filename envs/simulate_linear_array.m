@@ -4,7 +4,8 @@
 
 function [] = simulate_linear_array(id, input_path, output_path)
 
-    % TODO parametrize?
+                             % TODO parametrize?
+    randn('seed', 42)        % TODO gather all seeds in one place
     f0=3.5e6;                %  Transducer center frequency [Hz]
     fs=100e6;                %  Sampling frequency [Hz]
     c=1540;                  %  Speed of sound [m/s]
