@@ -2,9 +2,6 @@
 
 ### Examples:
 
-#### Find the appropriate Focal Point (FP) task:
-![](docs/anim_fp_disloc_p000_10.gif "FP task")
-
 #### Find the appropriate Scanning Plane (SP) task:
 ![](docs/anim_pp_p000_42.gif "SP task")
 
